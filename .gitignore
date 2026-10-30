@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.local/
+**/node_modules/
+**/.next/
+**/out/
+**/coverage/
+**/playwright-report/
+**/test-results/
+**/*.tsbuildinfo
+**/*.exe
+frontend/generated-headers.conf
+*.log
+.DS_Store
+Thumbs.db

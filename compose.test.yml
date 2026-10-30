@@ -1,0 +1,17 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: webhooklab_test
+      POSTGRES_USER: webhooklab_test
+      POSTGRES_PASSWORD: ${WEBHOOK_TEST_DB_PASSWORD:?Run scripts/Init.ps1}
+    ports:
+      - "127.0.0.1:5449:5432"
+    tmpfs: ["/var/lib/postgresql/data:size=128m"]
+    command: ["postgres", "-c", "shared_buffers=16MB", "-c", "max_connections=35"]
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webhooklab_test -d webhooklab_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 30

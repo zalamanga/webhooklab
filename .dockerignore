@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+.local
+**/node_modules
+**/.next
+**/out
+**/test-results
+**/playwright-report
+**/coverage
+**/*.tsbuildinfo
+**/*.log
+**/generated-headers.conf
+docs/screenshots

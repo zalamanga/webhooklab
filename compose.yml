@@ -1,0 +1,111 @@
+name: webhooklab
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: webhooklab
+      POSTGRES_USER: webhooklab
+      POSTGRES_PASSWORD: ${WEBHOOK_DB_PASSWORD:?Run scripts/Init.ps1}
+    ports:
+      - "127.0.0.1:5448:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=40"]
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webhooklab -d webhooklab"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  api:
+    image: webhooklab-backend:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      WEBHOOK_DB_URL: postgres://webhooklab:${WEBHOOK_DB_PASSWORD}@db:5432/webhooklab?sslmode=disable
+      WEBHOOK_DEMO_PASSWORD: ${WEBHOOK_DEMO_PASSWORD:?Run scripts/Init.ps1}
+      WEBHOOK_APP_ORIGIN: ${WEBHOOK_APP_ORIGIN:-http://127.0.0.1:8097}
+      WEBHOOK_COOKIE_SECURE: ${WEBHOOK_COOKIE_SECURE:-false}
+      GOMEMLIMIT: 64MiB
+      GOMAXPROCS: "2"
+    command: ["/app/api"]
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 128m
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/api/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  receiver:
+    image: webhooklab-backend:local
+    pull_policy: never
+    command: ["/app/receiver"]
+    environment:
+      WEBHOOK_DB_URL: postgres://webhooklab:${WEBHOOK_DB_PASSWORD}@db:5432/webhooklab?sslmode=disable
+      WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:?Run scripts/Init.ps1}
+      GOMEMLIMIT: 64MiB
+      GOMAXPROCS: "2"
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 128m
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8082/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  worker:
+    image: webhooklab-backend:local
+    pull_policy: never
+    command: ["/app/worker"]
+    environment:
+      WEBHOOK_DB_URL: postgres://webhooklab:${WEBHOOK_DB_PASSWORD}@db:5432/webhooklab?sslmode=disable
+      WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:?Run scripts/Init.ps1}
+      WEBHOOK_RECEIVER_BASE_URL: http://receiver:8082
+      GOMEMLIMIT: 64MiB
+      GOMAXPROCS: "2"
+    depends_on:
+      receiver:
+        condition: service_healthy
+    mem_limit: 128m
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "/app/worker", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "127.0.0.1:8097:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 64m
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+volumes:
+  postgres_data:
